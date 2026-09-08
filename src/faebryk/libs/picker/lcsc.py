@@ -17,7 +17,7 @@ from dataclasses_json import (
 from dataclasses_json import (
     config as dataclasses_json_config,
 )
-from easyeda2kicad.easyeda.easyeda_api import EasyedaApi
+from easyeda2kicad.easyeda.easyeda_api import EasyedaApi as _EasyedaApi
 from easyeda2kicad.easyeda.easyeda_importer import (
     EasyedaFootprintImporter,
     EasyedaSymbolImporter,
@@ -33,6 +33,23 @@ from atopile.config import config as Gcfg
 from faebryk.libs.kicad.fileformats import kicad, strip_duplicate_ref_texts
 from faebryk.libs.picker.picker import PickedPart, PickSupplier
 from faebryk.libs.util import ConfigFlag, call_with_file_capture, not_none, once
+
+# EasyEDA returns HTTP 403 (HTML) to the default "easyeda2kicad vX" User-Agent
+# since early 2026. Present browser-like headers, as upstream easyeda2kicad does.
+_EASYEDA_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://easyeda.com/",
+}
+
+
+def EasyedaApi() -> _EasyedaApi:  # noqa: N802 - drop-in for the upstream class
+    api = _EasyedaApi()
+    api.headers.update(_EASYEDA_HEADERS)
+    return api
+
 
 logger = logging.getLogger(__name__)
 
