@@ -41,7 +41,7 @@ def _deprecated_warning(input: str, replacement: str) -> None:
         )
 
 
-def _parse_smd_size(value: str) -> SMDSize:
+def _parse_smd_size(value: str) -> SMDSize | str:
     """
     Parse package string to SMDSize enum.
 
@@ -49,22 +49,27 @@ def _parse_smd_size(value: str) -> SMDSize:
     - Prefixes like R0402, C0603, L0805 (strips prefix)
     - Imperial format like 0402 (adds I prefix)
     - Direct enum names like I0402
-    """
-    value = re.sub(r"^[RCL]", "I", value)
 
-    if re.match(r"^[0-9]+$", value):
-        value = f"I{value}"
+    Anything that is not an SMDSize (e.g. `SOD-123`) is returned verbatim as a
+    free-form package name; the picker forwards it to the API unchanged for
+    endpoints that are not resistors/capacitors/inductors.
+    """
+    normalized = re.sub(r"^[RCL]", "I", value)
+
+    if re.match(r"^[0-9]+$", normalized):
+        normalized = f"I{normalized}"
 
     valid_names = {s.name for s in SMDSize}
-    if value not in valid_names:
-        from faebryk.libs.util import md_list
+    if normalized not in valid_names:
+        return value
 
-        raise DslException(
-            f"Invalid package: `{value}`. Valid packages are:\n"
-            f"{md_list(s.name for s in SMDSize)}"
-        )
+    return SMDSize[normalized]
 
-    return SMDSize[value]
+
+def _make_package_requirements(value: SMDSize | str) -> fabll._ChildField:
+    if isinstance(value, SMDSize):
+        return F.has_package_requirements.MakeChild(size=value)
+    return F.has_package_requirements.MakeChild(package_name=value)
 
 
 @dataclass
@@ -107,7 +112,7 @@ _ASSIGNMENT_OVERRIDES: dict[str, TraitOverrideSpec] = {
         trait_class=F.has_package_requirements,
         expected_type=str,
         transform_value=_parse_smd_size,
-        make_trait_field=lambda size: F.has_package_requirements.MakeChild(size=size),
+        make_trait_field=_make_package_requirements,
     ),
     "lcsc_id": TraitOverrideSpec(
         trait_class=F.Pickable.is_pickable_by_supplier_id,

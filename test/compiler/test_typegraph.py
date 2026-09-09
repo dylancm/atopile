@@ -2742,18 +2742,31 @@ class TestAssignmentOverride:
 
         assert "_trait_resistor_has_package_requirements" in identifiers
 
-    def test_package_invalid_raises(self):
-        """Test invalid package string raises DslException."""
-        with pytest.raises(DslException, match="Invalid package"):
-            build_type(
-                """
-                import Resistor
+    def test_package_free_form_name(self):
+        """
+        Test `package = "SOD-123"` (not an SMDSize) still creates the trait.
 
-                module App:
-                    resistor = new Resistor
-                    resistor.package = "INVALID_SIZE"
-                """
-            )
+        Non-SMD package names are forwarded verbatim to the picker; whether
+        they are valid for the module's endpoint is checked at pick time.
+        """
+        _, tg, _, result = build_type(
+            """
+            import Diode
+
+            module App:
+                diode = new Diode
+                diode.package = "SOD-123"
+            """
+        )
+
+        app_type = result.state.type_roots["App"]
+        identifiers = [
+            identifier
+            for identifier, _ in tg.collect_make_children(type_node=app_type)
+            if identifier
+        ]
+
+        assert "_trait_diode_has_package_requirements" in identifiers
 
     def test_lcsc_id_attaches_trait(self):
         """

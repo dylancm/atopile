@@ -102,6 +102,72 @@ def _from_smd_size(cls, size: SMDSize, type_node: graph.BoundNode) -> "BackendPa
 
 BackendPackage.from_smd_size = classmethod(_from_smd_size)  # type: ignore
 
+_PREFIXED_PACKAGE_ENDPOINTS = {
+    F.Pickable.is_pickable_by_type.Endpoint.RESISTORS,
+    F.Pickable.is_pickable_by_type.Endpoint.CAPACITORS,
+    F.Pickable.is_pickable_by_type.Endpoint.INDUCTORS,
+}
+
+
+def _raw_package_name(size: SMDSize) -> str:
+    """Package name as sent for non-R/C/L endpoints: `I0603`/`M1608` -> `0603`."""
+    try:
+        return size.imperial.without_prefix
+    except SMDSize.UnableToConvert:
+        return size.value
+
+
+def _make_package_literal(
+    module_node: fabll.Node,
+    trait: F.Pickable.is_pickable_by_type,
+    pkg_t: F.has_package_requirements,
+    g: graph.GraphView,
+    tg: fbrk.TypeGraph,
+) -> "F.Literals.AbstractEnums":
+    """
+    Build the `package` EnumSet literal for the query.
+
+    R/C/L endpoints map SMD sizes onto the prefixed `BackendPackage` members
+    (`R0603`). Every other endpoint sends package names verbatim (`0603`,
+    `SOD-123`) as members of an ad-hoc `BackendPackage` enum.
+    """
+    sizes = pkg_t.try_get_sizes()
+    names = pkg_t.try_get_package_names()
+    if sizes is None and names is None:
+        raise PickError(
+            f"Module `{module_node}` has no constrained package requirements",
+            module_node,
+        )
+
+    endpoint = F.Pickable.is_pickable_by_type.Endpoint(trait.endpoint)
+    if endpoint in _PREFIXED_PACKAGE_ENDPOINTS:
+        if names is not None:
+            raise PickError(
+                f"Module `{module_node}` has package `{', '.join(names)}` which is "
+                f"not a valid SMD size for `{endpoint.value}`",
+                module_node,
+            )
+        return (
+            F.Literals.EnumsFactory(BackendPackage)  # type: ignore[arg-type]
+            .bind_typegraph(tg=tg)
+            .create_instance(g=g)
+            .setup(
+                *[
+                    BackendPackage.from_smd_size(s, trait.pick_type)  # type: ignore[attr-defined]
+                    for s in sizes or []
+                ]
+            )
+        )
+
+    raw_names = sorted({*(_raw_package_name(s) for s in sizes or []), *(names or [])})
+    RawPackage = StrEnum("BackendPackage", {n: n for n in raw_names})
+    return (
+        F.Literals.EnumsFactory(RawPackage)
+        .bind_typegraph(tg=tg)
+        .create_instance(g=g)
+        .setup(*RawPackage)
+    )
+
 
 def _prepare_query(
     module: F.Pickable.is_pickable,
@@ -136,25 +202,7 @@ def _prepare_query(
         params_t = make_params_for_type(module_node)
 
         if pkg_t := module_node.try_get_trait(F.has_package_requirements):
-            package_constraint = pkg_t.size.get().try_extract_superset()
-            if package_constraint is None:
-                raise PickError(
-                    f"Module `{module_node}` has no constrained package requirements",
-                    module_node,
-                )
-            package = (
-                F.Literals.EnumsFactory(BackendPackage)  # type: ignore[arg-type]
-                .bind_typegraph(tg=tg)
-                .create_instance(g=g)
-                .setup(
-                    *[
-                        BackendPackage.from_smd_size(SMDSize[s], trait.pick_type)  # type: ignore[attr-defined]
-                        for s in F.Literals.AbstractEnums(
-                            package_constraint.instance
-                        ).get_names()
-                    ]
-                )
-            )
+            package = _make_package_literal(module_node, trait, pkg_t, g, tg)
         else:
             package = None
 
