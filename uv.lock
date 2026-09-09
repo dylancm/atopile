@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.14.*"
 
 [[package]]
@@ -143,7 +143,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "antlr4-python3-runtime", specifier = "==4.13.2" },
-    { name = "atopile-easyeda2kicad", specifier = ">=0.9.7" },
+    { name = "atopile-easyeda2kicad", specifier = ">=0.9.9" },
     { name = "atopile-kicad-python", specifier = ">=0.5.1" },
     { name = "black", specifier = ">=24.4.2" },
     { name = "case-converter", specifier = ">=1.2.0" },
@@ -214,16 +214,17 @@ dev = [
 
 [[package]]
 name = "atopile-easyeda2kicad"
-version = "0.9.7"
+version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "fake-useragent" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "truststore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/4d/ba2c53b3cb3a7f83ed580e1c2df0159faa5cecc25155f6b04e18d68b7a55/atopile_easyeda2kicad-0.9.7.tar.gz", hash = "sha256:6345f59d050f7c6c8d64e32a7db3bed5600d824c810eda1db578b1a995168c7f", size = 1473455, upload-time = "2025-09-01T22:54:39.519Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/ef/98de15a8a292145406c87eb5381227a1befb496a005cba66be6dc963238a/atopile_easyeda2kicad-0.9.9.tar.gz", hash = "sha256:57af22e81f36db7571815623556b4b8ac424afe5058c1e07c20aca3f90de1744", size = 1473704, upload-time = "2026-04-03T19:46:30.472Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/1a/9f6e2425008a895c4f8b398c6e8826b1bf66fe717ed6ab200ff7f12f4f26/atopile_easyeda2kicad-0.9.7-py3-none-any.whl", hash = "sha256:4ce8e720d499a788897b4082d08c3d527439509cb0768b89227377efa1c8aa4d", size = 54939, upload-time = "2025-09-01T22:54:37.876Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/26/73edfdf8f7c1ddb3c31f95cac01df0adc5890bea977cc59fb5d587546e42/atopile_easyeda2kicad-0.9.9-py3-none-any.whl", hash = "sha256:679e8e28de15f3e907982dd653640e6d54b9d0ae72f3706b1da62cb7d221e15b", size = 54879, upload-time = "2026-04-03T19:46:29.152Z" },
 ]
 
 [[package]]
@@ -647,6 +648,15 @@ wheels = [
 ]
 
 [[package]]
+name = "fake-useragent"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/43/948d10bf42735709edb5ae51e23297d034086f17fc7279fef385a7acb473/fake_useragent-2.2.0.tar.gz", hash = "sha256:4e6ab6571e40cc086d788523cf9e018f618d07f9050f822ff409a4dfe17c16b2", size = 158898, upload-time = "2025-04-14T15:32:19.238Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/37/b3ea9cd5558ff4cb51957caca2193981c6b0ff30bd0d2630ac62505d99d0/fake_useragent-2.2.0-py3-none-any.whl", hash = "sha256:67f35ca4d847b0d298187443aaf020413746e56acd985a611908c73dba2daa24", size = 161695, upload-time = "2025-04-14T15:32:17.732Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.128.7"
 source = { registry = "https://pypi.org/simple" }
@@ -781,6 +791,7 @@ dependencies = [
     { name = "griffecli" },
     { name = "griffelib" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/04/56/28a0accac339c164b52a92c6cfc45a903acc0c174caa5c1713803467b533/griffe-2.0.0.tar.gz", hash = "sha256:c68979cd8395422083a51ea7cf02f9c119d889646d99b7b656ee43725de1b80f", size = 293906, upload-time = "2026-03-23T21:06:53.402Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/94/ee21d41e7eb4f823b94603b9d40f86d3c7fde80eacc2c3c71845476dddaa/griffe-2.0.0-py3-none-any.whl", hash = "sha256:5418081135a391c3e6e757a7f3f156f1a1a746cc7b4023868ff7d5e2f9a980aa", size = 5214, upload-time = "2026-02-09T19:09:44.105Z" },
 ]
@@ -806,6 +817,7 @@ dependencies = [
     { name = "colorama" },
     { name = "griffelib" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/a4/f8/2e129fd4a86e52e58eefe664de05e7d502decf766e7316cc9e70fdec3e18/griffecli-2.0.0.tar.gz", hash = "sha256:312fa5ebb4ce6afc786356e2d0ce85b06c1c20d45abc42d74f0cda65e159f6ef", size = 56213, upload-time = "2026-03-23T21:06:54.8Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/ed/d93f7a447bbf7a935d8868e9617cbe1cadf9ee9ee6bd275d3040fbf93d60/griffecli-2.0.0-py3-none-any.whl", hash = "sha256:9f7cd9ee9b21d55e91689358978d2385ae65c22f307a63fb3269acf3f21e643d", size = 9345, upload-time = "2026-02-09T19:09:42.554Z" },
 ]
@@ -814,6 +826,7 @@ wheels = [
 name = "griffelib"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/06/eccbd311c9e2b3ca45dbc063b93134c57a1ccc7607c5e545264ad092c4a9/griffelib-2.0.0.tar.gz", hash = "sha256:e504d637a089f5cab9b5daf18f7645970509bf4f53eda8d79ed71cce8bd97934", size = 166312, upload-time = "2026-03-23T21:06:55.954Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4d/51/c936033e16d12b627ea334aaaaf42229c37620d0f15593456ab69ab48161/griffelib-2.0.0-py3-none-any.whl", hash = "sha256:01284878c966508b6d6f1dbff9b6fa607bc062d8261c5c7253cb285b06422a7f", size = 142004, upload-time = "2026-02-09T19:09:40.561Z" },
 ]
