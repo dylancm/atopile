@@ -35,7 +35,7 @@ from atopile.cli import (
     view,
 )
 from atopile.errors import (
-    UserException,
+    UserBadParameterError,
     UserNoProjectException,
     UserResourceException,
     iter_leaf_exceptions,
@@ -243,33 +243,155 @@ def dump_config(format: ConfigFormat = ConfigFormat.python):
     console.print(config.project.model_dump(mode=format))
 
 
-@app.command(help="Check file for syntax errors and internal consistency")
-def validate(
-    path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
-):
-    from atopile.compiler import front_end
+def _check_import_paths(linker, scope, *, base_file: Path) -> None:
+    """
+    Eagerly resolve every path import in `scope` (recursing into blocks).
+
+    The compiler only resolves `from "x.ato" import Y` when `Y` is first used,
+    so an import of a missing file would otherwise pass unnoticed.
+    """
+    from atopile.compiler import DslImportError, DslRichException
+    from atopile.compiler import ast_types as AST
+    from atopile.compiler.build import ImportPathNotFoundError
+    from atopile.errors import accumulate
+
+    with accumulate() as accumulator:
+        for stmt in scope.stmts.get().as_list():
+            if stmt.isinstance(AST.BlockDefinition):
+                _check_import_paths(
+                    linker,
+                    stmt.cast(t=AST.BlockDefinition).scope.get(),
+                    base_file=base_file,
+                )
+                continue
+            if not stmt.isinstance(AST.ImportStmt):
+                continue
+            import_path = stmt.cast(t=AST.ImportStmt).get_path()
+            if import_path is None:
+                continue  # stdlib import, already checked by the visitor
+            with accumulator.collect():
+                try:
+                    linker._resolver.resolve(raw_path=import_path, base_file=base_file)
+                except ImportPathNotFoundError as e:
+                    raise DslRichException(
+                        message=str(e),
+                        original=DslImportError(str(e)),
+                        source_node=stmt,
+                    ) from e
+
+
+def _validate_ato_file(path: Path) -> None:
+    """
+    Compile every module in a single `.ato` file.
+
+    Runs the front end (parse, link imports, validate the type graph) and
+    instantiates each top-level module exactly like the `instantiate-app` build
+    step does. No solver, part picking, PCB access, or network traffic.
+    """
+    import faebryk.core.faebrykpy as fbrk
+    import faebryk.core.graph as graph
+    import faebryk.core.node as fabll
+    import faebryk.library._F as F
+    from atopile.compiler import DslRichException, DslTypeError, format_message
+    from atopile.compiler.build import (
+        Linker,
+        StdlibRegistry,
+        build_file,
+        build_stage_2,
+    )
     from atopile.config import config
 
-    path = path.resolve().relative_to(Path.cwd())
+    if path.is_dir():
+        raise UserResourceException(
+            f"`{path}` is a directory; expected a `.ato` file", markdown=False
+        )
+    if not path.exists():
+        raise UserResourceException(f"`{path}` does not exist", markdown=False)
+    if path.suffix != ".ato":
+        raise UserResourceException(f"`{path}` is not a `.ato` file", markdown=False)
+
+    # Fresh graphs per file so one broken file can't poison the next
+    g = graph.GraphView.create()
+    tg = fbrk.TypeGraph.create(g=g)
+    linker = Linker(config, StdlibRegistry(tg), tg)
+
+    result = build_file(g=g, tg=tg, import_path=path.name, path=path.resolve())
+    build_stage_2(g=g, tg=tg, linker=linker, result=result)
+    _check_import_paths(linker, result.ast_root.scope.get(), base_file=path.resolve())
+
+    for type_node in result.state.type_roots.values():
+        try:
+            root = tg.instantiate_node(type_node=type_node, attributes={})
+        except fbrk.TypeGraphInstantiationError as e:
+            message = format_message(e)
+            raise DslRichException(
+                message=message,
+                original=DslTypeError(message),
+                source_node=fabll.Node.bind_instance(e.node) if e.node else None,
+            ) from e
+
+        node = fabll.Node.bind_instance(root)
+        F.Parameters.NumericParameter.infer_units_in_tree(node)
+        F.Parameters.NumericParameter.validate_predicate_units_in_tree(node)
+
+
+@app.command(help="Check .ato files for syntax errors and internal consistency")
+def validate(
+    paths: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help="`.ato` files to check, relative to the current directory",
+            show_default=False,
+        ),
+    ] = None,
+    build: Annotated[
+        str | None,
+        typer.Option(
+            "--build",
+            "-b",
+            help="Also check the entry file of this build target",
+            show_default=False,
+        ),
+    ] = None,
+):
+    """
+    Compile every module in the given files without building.
+
+    Prints `<path>: ok` per file that compiles; logs every error otherwise.
+    Exits 1 if any file failed, 0 if all passed.
+    """
+    from atopile.config import config
 
     # pick up project config if we're in a project
     # required for package search path inclusion
     try:
-        config.apply_options(entry=None)
+        config.apply_options(entry=None, selected_builds=[build] if build else ())
     except UserNoProjectException:
-        pass
+        if build is not None:
+            raise
 
-    if path.suffix != ".ato":
-        raise UserResourceException("Invalid file type")
+    files = list(paths or [])
+    if build is not None:
+        files.append(config.project.builds[build].entry_file_path)
+    if not files:
+        raise UserBadParameterError(
+            "Nothing to validate: pass at least one `.ato` file or `--build`",
+            markdown=False,
+        )
 
-    try:
-        front_end.bob.try_build_all_from_file(path)
-    except* UserException as e:
-        for error in iter_leaf_exceptions(e):
-            logger.error(error, exc_info=error)
+    failed = False
+    for path in files:
+        try:
+            _validate_ato_file(path)
+        except Exception as exc:
+            failed = True
+            for error in iter_leaf_exceptions(exc):
+                logger.error(error, exc_info=error)
+        else:
+            typer.echo(f"{path}: ok")
 
-    else:
-        typer.echo(f"{path}: ok")
+    if failed:
+        raise typer.Exit(1)
 
 
 def main():
