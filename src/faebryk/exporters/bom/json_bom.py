@@ -109,6 +109,8 @@ def _get_component_type_from_endpoint(
         F.Pickable.is_pickable_by_type.Endpoint.RESISTORS: "resistor",
         F.Pickable.is_pickable_by_type.Endpoint.CAPACITORS: "capacitor",
         F.Pickable.is_pickable_by_type.Endpoint.INDUCTORS: "inductor",
+        F.Pickable.is_pickable_by_type.Endpoint.DIODES: "diode",
+        F.Pickable.is_pickable_by_type.Endpoint.LEDS: "led",
     }
     return endpoint_map.get(endpoint, "other")
 

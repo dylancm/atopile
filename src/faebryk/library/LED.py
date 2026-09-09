@@ -63,6 +63,21 @@ class LED(fabll.Node):
         F.Footprints.can_attach_to_footprint.MakeChild()
     )
 
+    # Diode params are registered under their unprefixed child name
+    # (`forward_voltage`, not `diode.forward_voltage`) to match the API contract.
+    _is_pickable = fabll.Traits.MakeEdge(
+        F.Pickable.is_pickable_by_type.MakeChild(
+            endpoint=F.Pickable.is_pickable_by_type.Endpoint.LEDS,
+            params={
+                "forward_voltage": [diode, F.Diode.forward_voltage],
+                "current": [diode, F.Diode.current],
+                "max_current": [diode, F.Diode.max_current],
+                "max_brightness": max_brightness,
+                "color": color,
+            },
+        )
+    )
+
     designator_prefix = fabll.Traits.MakeEdge(
         F.has_designator_prefix.MakeChild(F.has_designator_prefix.Prefix.D)
     )

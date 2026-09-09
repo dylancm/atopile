@@ -32,6 +32,19 @@ class Diode(fabll.Node):
         F.Footprints.can_attach_to_footprint.MakeChild()
     )
 
+    _is_pickable = fabll.Traits.MakeEdge(
+        F.Pickable.is_pickable_by_type.MakeChild(
+            endpoint=F.Pickable.is_pickable_by_type.Endpoint.DIODES,
+            params={
+                "forward_voltage": forward_voltage,
+                "current": current,
+                "reverse_working_voltage": reverse_working_voltage,
+                "reverse_leakage_current": reverse_leakage_current,
+                "max_current": max_current,
+            },
+        )
+    )
+
     anode_lead = fabll.Traits.MakeEdge(F.Lead.is_lead.MakeChild(), [anode])
     cathode_lead = fabll.Traits.MakeEdge(F.Lead.is_lead.MakeChild(), [cathode])
 

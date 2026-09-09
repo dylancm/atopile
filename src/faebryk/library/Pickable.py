@@ -77,6 +77,8 @@ class is_pickable_by_type(fabll.Node):
         RESISTORS = "resistors"
         CAPACITORS = "capacitors"
         INDUCTORS = "inductors"
+        DIODES = "diodes"
+        LEDS = "leds"
 
     is_trait = fabll.Traits.MakeEdge(fabll.ImplementsTrait.MakeChild().put_on_type())
     endpoint_ = F.Parameters.EnumParameter.MakeChild(enum_t=Endpoint)
@@ -121,7 +123,18 @@ class is_pickable_by_type(fabll.Node):
         return not_none(parent.get_type_node())
 
     @classmethod
-    def MakeChild(cls, endpoint: Endpoint, params: dict[str, fabll._ChildField]):
+    def MakeChild(
+        cls,
+        endpoint: Endpoint,
+        params: "dict[str, fabll._ChildField | fabll.RefPath]",
+    ):
+        """
+        Register `params` for parametric picking.
+
+        Values are either a direct child field of the owner, or a full RefPath
+        (e.g. `[diode, F.Diode.forward_voltage]`) for a parameter living on a
+        child module. The wire name is always the dict key.
+        """
         out = fabll._ChildField(cls)
         out.add_dependant(
             F.Literals.AbstractEnums.MakeChild_SetSuperset(
@@ -148,9 +161,10 @@ class is_pickable_by_type(fabll.Node):
                 )
             )
             # Add param reference to tuple
+            elem_ref = list(param_ref) if isinstance(param_ref, list) else [param_ref]
             out.add_dependant(
                 F.Collections.PointerTuple.SetPointer(
-                    tup_ref=[param_tuple], elem_ref=[param_ref]
+                    tup_ref=[param_tuple], elem_ref=elem_ref
                 )
             )
         return out
