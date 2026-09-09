@@ -785,8 +785,8 @@ components_to_test = (
     *resistors,
     *capacitors,
     *inductors,
+    *diodes,
+    *leds,
     # No pickers for the following components yet
     # *mosfets,
-    # *diodes,
-    # *leds,
 )

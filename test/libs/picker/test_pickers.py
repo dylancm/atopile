@@ -872,3 +872,230 @@ def test_find_groups_nested_modules_with_shared_constraint():
     assert r_bottom_pickable in r_top_group, (
         "Voltage divider resistors should be grouped"
     )
+
+
+@pytest.mark.parametrize(
+    "module_t, endpoint, expected_fields",
+    [
+        (
+            F.LED,
+            "leds",
+            {
+                "endpoint",
+                "package",
+                "qty",
+                "forward_voltage",
+                "current",
+                "max_current",
+                "max_brightness",
+                "color",
+            },
+        ),
+        (
+            F.Diode,
+            "diodes",
+            {
+                "endpoint",
+                "package",
+                "qty",
+                "forward_voltage",
+                "current",
+                "reverse_working_voltage",
+                "reverse_leakage_current",
+                "max_current",
+            },
+        ),
+    ],
+)
+def test_make_params_for_type_led_diode(module_t, endpoint, expected_fields):
+    """Offline: LED/Diode register exactly the API contract's parameter names."""
+    from dataclasses import fields
+
+    from faebryk.libs.picker.api.models import make_params_for_type
+
+    g = graph.GraphView.create()
+    tg = fbrk.TypeGraph.create(g=g)
+    module = module_t.bind_typegraph(tg=tg).create_instance(g=g)
+
+    trait = module.get_trait(F.Pickable.is_pickable_by_type)
+    assert trait.endpoint == endpoint
+
+    params_t = make_params_for_type(module)
+    assert {f.name for f in fields(params_t)} == expected_fields
+
+
+def test_attach_led_component_offline(monkeypatch, caplog):
+    """Offline: a server-shaped LED response applies to the LED's params."""
+    from unittest.mock import Mock
+
+    from faebryk.libs.picker.api import models
+    from faebryk.libs.picker.api.models import Component
+
+    # Avoid network calls to LCSC/EasyEDA
+    monkeypatch.setattr(models, "lcsc_attach", Mock())
+
+    g = graph.GraphView.create()
+    tg = fbrk.TypeGraph.create(g=g)
+
+    led = F.LED.bind_typegraph(tg=tg).create_instance(g=g)
+
+    def _num(lit):
+        return lit.is_literal.get().serialize()
+
+    forward_voltage = (
+        F.Literals.Numbers.bind_typegraph(tg)
+        .create_instance(g=g)
+        .setup_from_center_rel(
+            center=2.0,
+            rel=0.05,
+            unit=F.Units.Volt.bind_typegraph(tg=tg).create_instance(g=g).is_unit.get(),
+        )
+    )
+    max_current = (
+        F.Literals.Numbers.bind_typegraph(tg)
+        .create_instance(g=g)
+        .setup_from_singleton(
+            value=20e-3,
+            unit=F.Units.Ampere.bind_typegraph(tg=tg)
+            .create_instance(g=g)
+            .is_unit.get(),
+        )
+    )
+    max_brightness = (
+        F.Literals.Numbers.bind_typegraph(tg)
+        .create_instance(g=g)
+        .setup_from_singleton(
+            value=120e-3,
+            unit=F.Units.Candela.bind_typegraph(tg=tg)
+            .create_instance(g=g)
+            .is_unit.get(),
+        )
+    )
+
+    # Exactly the wire shape the components service returns for an LED
+    attributes = {
+        "forward_voltage": _num(forward_voltage),
+        "current": None,  # unknown on the server side
+        "max_current": _num(max_current),
+        "max_brightness": _num(max_brightness),
+        "color": {
+            "type": "EnumSet",
+            "data": {
+                "elements": [{"name": "RED"}],
+                "enum": {
+                    "name": "Color",
+                    "values": {m.name: m.value for m in F.LED.Color},
+                },
+            },
+        },
+    }
+
+    component = Component(
+        lcsc=2286,
+        manufacturer_name="Hongli Zhihui",
+        part_number="HL-PC-3216S9AC",
+        package="0603",
+        datasheet_url="",
+        description="Red 0603 LED",
+        is_basic=1,
+        is_preferred=0,
+        stock=1000,
+        price=[],
+        attributes=attributes,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        component.attach(
+            led.get_trait(F.Pickable.is_pickable_by_type).get_trait(
+                F.Pickable.is_pickable
+            ),
+            qty=1,
+        )
+
+    assert "missing attributes" not in caplog.text
+    assert led.has_trait(F.Pickable.has_part_picked)
+    picked = led.get_trait(F.Pickable.has_part_picked)
+    assert picked.get_part().partno == "HL-PC-3216S9AC"
+    assert picked.get_attribute("color") is not None
+    assert picked.get_attribute("current") is None
+
+    # attach asserts `param ⊇ picked value`, so the picked value is the subset
+    color_lit = (
+        fabll.Traits(
+            led.color.get().is_parameter_operatable.get().force_extract_subset()
+        )
+        .get_obj_raw()
+        .cast(F.Literals.AbstractEnums, check=False)
+    )
+    assert color_lit.get_values() == ["RED"]
+    vf_lit = led.diode.get().forward_voltage.get().force_extract_subset()
+    assert vf_lit.op_setic_is_subset_of(forward_voltage, g=g, tg=tg)
+
+
+def _package_elements(params) -> list[str]:
+    serialized = params.serialize()["package"]
+    assert serialized["type"] == "EnumSet"
+    assert serialized["data"]["enum"]["name"] == "BackendPackage"
+    return [e["name"] for e in serialized["data"]["elements"]]
+
+
+@pytest.mark.parametrize(
+    "module_t, package_kwargs, expected",
+    [
+        (F.Diode, {"package_name": "SOD-123"}, ["SOD-123"]),
+        (F.LED, {"size": SMDSize.I0603}, ["0603"]),
+        (F.LED, {"size": SMDSize.M1608}, ["0603"]),
+        (F.Resistor, {"size": SMDSize.I0603}, ["R0603"]),
+    ],
+)
+def test_prepare_query_package_passthrough(module_t, package_kwargs, expected):
+    """Offline: non-R/C/L endpoints send package names verbatim, R/C/L prefixed."""
+    from faebryk.libs.picker.api.picker_lib import _prepare_query
+
+    g = graph.GraphView.create()
+    tg = fbrk.TypeGraph.create(g=g)
+
+    class _App(fabll.Node):
+        m = module_t.MakeChild()
+        _pkg = fabll.Traits.MakeEdge(
+            F.has_package_requirements.MakeChild(**package_kwargs), [m]
+        )
+
+    app = _App.bind_typegraph(tg=tg).create_instance(g=g)
+    pickable = (
+        app.m.get()
+        .get_trait(F.Pickable.is_pickable_by_type)
+        .get_trait(F.Pickable.is_pickable)
+    )
+
+    qg = graph.GraphView.create()
+    qtg = fbrk.TypeGraph.create(g=qg)
+    params = _prepare_query(pickable, Solver(), qg, qtg)
+
+    assert _package_elements(params) == expected
+
+
+def test_prepare_query_rejects_free_form_package_for_resistor():
+    """Offline: a non-SMD package name on an R/C/L module is a pick error."""
+    from faebryk.libs.picker.api.picker_lib import _prepare_query
+
+    g = graph.GraphView.create()
+    tg = fbrk.TypeGraph.create(g=g)
+
+    class _App(fabll.Node):
+        r = F.Resistor.MakeChild()
+        _pkg = fabll.Traits.MakeEdge(
+            F.has_package_requirements.MakeChild(package_name="SOD-123"), [r]
+        )
+
+    app = _App.bind_typegraph(tg=tg).create_instance(g=g)
+    pickable = (
+        app.r.get()
+        .get_trait(F.Pickable.is_pickable_by_type)
+        .get_trait(F.Pickable.is_pickable)
+    )
+
+    qg = graph.GraphView.create()
+    qtg = fbrk.TypeGraph.create(g=qg)
+    with pytest.raises(PickError, match="not a valid SMD size"):
+        _prepare_query(pickable, Solver(), qg, qtg)
