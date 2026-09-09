@@ -213,6 +213,9 @@ _ENUM_PARAMETER_OVERRIDES: dict[str, EnumParameterOverrideSpec] = {
     "response_type": EnumParameterOverrideSpec(
         enum_type=F.Fuse.ResponseType,
     ),
+    "color": EnumParameterOverrideSpec(
+        enum_type=F.LED.Color,
+    ),
 }
 
 

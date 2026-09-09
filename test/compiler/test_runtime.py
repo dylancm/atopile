@@ -496,6 +496,26 @@ def test_assign_to_enum_param():
     )
 
 
+def test_assign_to_led_color_enum_param():
+    """Test string assignment to LED.color resolves to the Color enum."""
+    _, _, _, _, app_instance = build_instance(
+        """
+            import LED
+
+            module App:
+                led = new LED
+                led.color = "RED"
+            """,
+        "App",
+    )
+    led = _get_child(app_instance, "led")
+    color = F.LED.bind_instance(led).color.get()
+    lit = color.is_parameter_operatable.get().try_extract_superset()
+    assert lit is not None
+    enum_lit = fabll.Traits(lit).get_obj(F.Literals.AbstractEnums)
+    assert enum_lit.get_single_value_typed(F.LED.Color) == F.LED.Color.RED
+
+
 def test_assert_is():
     """Test assert is constraints."""
     _, _, _, _, app_instance = build_instance(
